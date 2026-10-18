@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Toggle } from "../components/Toggle";
 import { UpdateBanner } from "../components/UpdateBanner";
+import { LeakGuardCard } from "../components/LeakGuardCard";
 import { useStatus } from "../lib/status";
 import { autostartGet, autostartSet } from "../lib/api";
 import { fadeInUp, staggerContainer } from "../lib/motion";
@@ -11,7 +12,7 @@ import { isMac } from "../lib/platform";
 import { cn } from "../lib/cn";
 
 /*
-  Настройки: автозапуск GUI и версии. Прокси-пул и назначения живут в
+  Настройки: автозапуск GUI, защита от утечек и версии. Прокси-пул и назначения живут в
   своём разделе «Прокси» (сайдбар) — здесь только системное.
 */
 export function Settings() {
@@ -95,6 +96,13 @@ export function Settings() {
           </p>
         )}
       </motion.section>
+
+      {/* ── Защита от утечек (pf, только macOS) ── */}
+      {isMac && (
+        <motion.div variants={fadeInUp} className="mt-4">
+          <LeakGuardCard />
+        </motion.div>
+      )}
 
       {/* ── Обновления ── */}
       <motion.section variants={fadeInUp} className="mt-4">

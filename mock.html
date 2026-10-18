@@ -41,6 +41,7 @@
     ],
   };
   let layout = null;
+  let leak = { enabled: false, services: "", auto_restore: false, verified: null };
   const R = {
     settings_get: { proxy_url: "http://u:p@185.68.187.138:8000" },
     shim_script_path: "/x",
@@ -90,6 +91,12 @@
     invoke: async (cmd, args) => {
       if (cmd === "apps_layout_get") return layout;
       if (cmd === "apps_layout_set") { layout = args.layout; return null; }
+      if (cmd === "leak_guard_set") {
+        const on = args.services.length > 0;
+        leak = { enabled: on, services: args.services.join(","), auto_restore: on, verified: on && args.services.includes("claude") ? true : null };
+        return leak;
+      }
+      if (cmd === "leak_guard_status") return leak;
       if (cmd === "apps_remove") { const a = apps.find((x) => x.id === args.id); if (a) a.hidden = true; return apps; }
       if (cmd.startsWith("plugin:event|")) return 1;
       if (cmd in R) return structuredClone(R[cmd]);

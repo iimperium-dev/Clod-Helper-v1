@@ -21,6 +21,7 @@ mod telegram;
 mod traffic;
 mod browser_ext;
 mod browser_policy;
+mod leak_guard;
 mod privacy;
 mod updater;
 mod vscode_config;
@@ -91,6 +92,8 @@ pub fn run() {
             commands::update_install,
             commands::browser_policy_status,
             commands::browser_policy_set,
+            commands::leak_guard_status,
+            commands::leak_guard_set,
             commands::apps_search,
             commands::apps_icons,
             commands::apps_layout_get,

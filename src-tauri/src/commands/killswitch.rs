@@ -74,3 +74,20 @@ pub async fn killswitch_disable() -> Result<KillswitchStatus, String> {
         .await
         .map_err(|e| format!("Внутренняя ошибка: {e}"))?)
 }
+
+/// «Защита от утечек» (pf, macOS): текущее состояние и живая проверка.
+#[tauri::command]
+pub async fn leak_guard_status() -> Result<crate::leak_guard::LeakGuardStatus, String> {
+    tokio::task::spawn_blocking(crate::leak_guard::status)
+        .await
+        .map_err(|e| format!("Внутренняя ошибка: {e}"))?
+}
+
+/// Включить для выбранных сервисов (пустой список — снять). Пароль Mac.
+#[tauri::command]
+pub async fn leak_guard_set(services: Vec<String>) -> Result<crate::leak_guard::LeakGuardStatus, String> {
+    let list = crate::leak_guard::normalize(&services)?;
+    tokio::task::spawn_blocking(move || crate::leak_guard::set(&list))
+        .await
+        .map_err(|e| format!("Внутренняя ошибка: {e}"))?
+}

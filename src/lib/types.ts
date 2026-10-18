@@ -295,3 +295,13 @@ export interface UpdateInfo {
   dmg_url: string;
   sums_url: string;
 }
+
+/** «Защита от утечек» (pf, macOS). */
+export interface LeakGuardStatus {
+  enabled: boolean;
+  /** "claude", "telegram" или "claude,telegram". */
+  services: string;
+  auto_restore: boolean;
+  /** Живая проверка: прямое соединение с Anthropic отклонено. null — не понять. */
+  verified: boolean | null;
+}

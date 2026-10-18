@@ -114,3 +114,23 @@ test("windows: статусы по соединениям, Telegram и вид п
   await page.screenshot({ path: "test-results/apps-windows.png" });
   expect(errors).toEqual([]);
 });
+
+test("настройки: защита от утечек включается и подтверждается", async ({ page }) => {
+  const errors = await open(page);
+  await go(page, "Настройки");
+  const card = page.getByRole("region", { name: "Защита от утечек" });
+  await expect(card).toBeVisible();
+  await card.getByRole("switch", { name: "Защита Claude" }).click();
+  await expect(card.getByText("Проверено: напрямую к Claude не пройти")).toBeVisible();
+  await card.getByRole("switch", { name: "Защита Telegram" }).click();
+  await expect(card.getByRole("switch", { name: "Защита Telegram" })).toBeChecked();
+  await page.screenshot({ path: "test-results/leak-guard.png" });
+  expect(errors).toEqual([]);
+});
+
+test("windows: защиты от утечек нет", async ({ page }) => {
+  await open(page, "still&platform=win");
+  await go(page, "Настройки");
+  await expect(page.getByText("Открывать при входе")).toBeVisible();
+  await expect(page.getByText("Защита от утечек")).toHaveCount(0);
+});

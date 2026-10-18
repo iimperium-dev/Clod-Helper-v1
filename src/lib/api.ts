@@ -11,6 +11,7 @@ import type {
   PrivacyReport,
   UpdateInfo,
   BrowserPolicyStatus,
+  LeakGuardStatus,
   AutostartState,
   BridgeTaskStatus,
   ClaudeProxyStatus,
@@ -354,4 +355,13 @@ export function updateCheck(): Promise<UpdateInfo | null> {
 /** Скачать, проверить SHA-256, поставить и перезапуститься. */
 export function updateInstall(info: UpdateInfo): Promise<void> {
   return invoke<void>("update_install", { info });
+}
+
+export function leakGuardStatus(): Promise<LeakGuardStatus> {
+  return invoke<LeakGuardStatus>("leak_guard_status");
+}
+
+/** Пустой список — снять защиту. Mac попросит пароль. */
+export function leakGuardSet(services: string[]): Promise<LeakGuardStatus> {
+  return invoke<LeakGuardStatus>("leak_guard_set", { services });
 }
