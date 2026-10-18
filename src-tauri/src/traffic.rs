@@ -171,6 +171,31 @@ fn summarize(
         .collect()
 }
 
+/// Включена ли у браузера политика «всегда через мост» (кэш 30 с: статус —
+/// это запуск скрипта).
+#[cfg(not(target_os = "windows"))]
+fn browser_policy_on(app_path: &str) -> bool {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    static CACHE: Mutex<Option<HashMap<String, (Instant, bool)>>> = Mutex::new(None);
+    let Some(domain) = crate::browser_policy::policy_domain(app_path) else {
+        return false;
+    };
+    if let Ok(mut c) = CACHE.lock() {
+        let map = c.get_or_insert_with(HashMap::new);
+        if let Some((t, v)) = map.get(domain) {
+            if t.elapsed() < Duration::from_secs(30) {
+                return *v;
+            }
+        }
+        let on = crate::browser_policy::status(domain).is_ok_and(|s| s.configured);
+        map.insert(domain.to_string(), (Instant::now(), on));
+        return on;
+    }
+    false
+}
+
 /// Снимок не чаще раза в 3 с: страница «Приложения» и окно настроек могут
 /// спросить почти одновременно, а lsof по всем процессам — не бесплатный.
 #[cfg(not(target_os = "windows"))]
@@ -216,7 +241,11 @@ fn snapshot_uncached(profiles: &[AppProfile]) -> Vec<AppTraffic> {
     let mut t = summarize(profiles, &running, &parse_lsof(&out));
     for (traffic, p) in t.iter_mut().zip(profiles) {
         if let Some(path) = p.exe_path.as_deref() {
-            traffic.proxy_extension = crate::browser_ext::proxy_extensions(path).into_iter().next();
+            // Политика «всегда через мост» главнее расширений — тогда
+            // FoxyProxy и т.п. уже ничего не перехватывают.
+            if !browser_policy_on(path) {
+                traffic.proxy_extension = crate::browser_ext::proxy_extensions(path).into_iter().next();
+            }
         }
     }
     t

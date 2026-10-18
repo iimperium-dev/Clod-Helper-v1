@@ -259,3 +259,31 @@ export interface ProxyPing {
 
 /** Группы сервисов для назначений (mirror tasks::SERVICE_GROUPS). */
 export type ServiceGroup = "anthropic" | "openai" | "google" | "other_ai" | "telegram";
+
+/** Внешний IP с подписью (страна, сеть). */
+export interface IpInfo {
+  ip: string;
+  country: string;
+  org: string;
+}
+
+/** «Проверка приватности»: что видят сервисы и есть ли утечки. */
+export interface PrivacyReport {
+  exit: IpInfo | null;
+  home: IpInfo | null;
+  dns: IpInfo[];
+  ip_hidden: boolean;
+  dns_leak: boolean;
+  leaking_apps: string[];
+  error: string | null;
+}
+
+/** «Всегда через мост» у Chromium-браузера (политика macOS). */
+export interface BrowserPolicyStatus {
+  configured: boolean;
+  managed: boolean;
+  conflict: string | null;
+  auto_restore: boolean;
+  server: string;
+  notice: string | null;
+}

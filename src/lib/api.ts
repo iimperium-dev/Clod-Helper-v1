@@ -8,6 +8,8 @@ import type {
   TelegramStatus,
   AppTraffic,
   FoundApp,
+  PrivacyReport,
+  BrowserPolicyStatus,
   AutostartState,
   BridgeTaskStatus,
   ClaudeProxyStatus,
@@ -327,4 +329,18 @@ export async function showMainWindow(): Promise<void> {
 /** Полный выход из приложения (мост продолжает работать — он отдельный процесс). */
 export async function quitApp(): Promise<void> {
   return invoke<void>("quit_app");
+}
+
+/** Проверка приватности: IP выхода/настоящий, DNS, кто идёт мимо моста. */
+export function privacyCheck(): Promise<PrivacyReport> {
+  return invoke<PrivacyReport>("privacy_check");
+}
+
+/** «Всегда через мост» у браузера; null — браузер без политик. */
+export function browserPolicyStatus(id: string): Promise<BrowserPolicyStatus | null> {
+  return invoke<BrowserPolicyStatus | null>("browser_policy_status", { id });
+}
+
+export function browserPolicySet(id: string, enable: boolean): Promise<BrowserPolicyStatus> {
+  return invoke<BrowserPolicyStatus>("browser_policy_set", { id, enable });
 }

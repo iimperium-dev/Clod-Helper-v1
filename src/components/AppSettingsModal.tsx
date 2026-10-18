@@ -8,13 +8,15 @@ import type { RowStatus } from "./AppRow";
 import {
   appsCreateShortcut,
   appsSettingsSet,
+  browserPolicySet,
+  browserPolicyStatus,
   proxiesGet,
   proxyAssignmentsGet,
   proxyAssignmentsSet,
   proxyLabelsGet,
 } from "../lib/api";
 import type { AppFolder } from "../lib/appLayout";
-import type { AppProfileStatus } from "../lib/types";
+import type { AppProfileStatus, BrowserPolicyStatus } from "../lib/types";
 import { cn } from "../lib/cn";
 
 /** Встроенные, чей прокси — назначение сервиса (мост роутит по доменам). */
@@ -63,6 +65,7 @@ export function AppSettingsModal({
   const [assign, setAssign] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<BrowserPolicyStatus | null>(null);
 
   useEffect(() => {
     if (!app) return;
@@ -71,6 +74,7 @@ export function AppSettingsModal({
       proxiesGet().then(setPool).catch(() => {}),
       proxyLabelsGet().then(setLabels).catch(() => {}),
       proxyAssignmentsGet().then(setAssign).catch(() => {}),
+      browserPolicyStatus(app.id).then(setPolicy).catch(() => setPolicy(null)),
     ]);
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
@@ -212,6 +216,34 @@ export function AppSettingsModal({
                       )
                     }
                     label="Весь трафик через прокси"
+                  />
+                </div>
+              </Section>
+            )}
+
+            {/* Браузер: политика главнее Dock-запуска и расширений */}
+            {policy && (
+              <Section>
+                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                  <span className="min-w-0">
+                    <span className="block text-[13px] text-vb-fg">Всегда через мост</span>
+                    <span className="block text-[11px] text-vb-silver-faint">
+                      {policy.conflict
+                        ? policy.conflict
+                        : "Даже из Dock, расширения не перебивают. Пароль Mac один раз"}
+                    </span>
+                  </span>
+                  <Toggle
+                    checked={policy.configured}
+                    disabled={busy || !!policy.conflict}
+                    onChange={() =>
+                      void run(async () => {
+                        const next = await browserPolicySet(app.id, !policy.configured);
+                        setPolicy(next);
+                        return null;
+                      }, policy.configured ? "Снято — перезапустите браузер" : "Готово — перезапустите браузер")
+                    }
+                    label="Всегда через мост"
                   />
                 </div>
               </Section>

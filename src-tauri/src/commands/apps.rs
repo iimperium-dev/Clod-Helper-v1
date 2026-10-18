@@ -237,3 +237,67 @@ pub async fn apps_create_shortcut(
         .await
         .map_err(|e| format!("Внутренняя ошибка: {e}"))?
 }
+
+
+// ─── Приватность и политика браузера ────────────────────────────
+
+/// Проверка приватности: IP выхода и настоящий, DNS, кто идёт мимо моста.
+#[tauri::command]
+pub async fn privacy_check() -> Result<crate::privacy::PrivacyReport, String> {
+    let leaking = tokio::task::spawn_blocking(|| {
+        let s = settings::load_with_presets();
+        let traffic = crate::traffic::snapshot(&s.app_profiles);
+        s.app_profiles
+            .iter()
+            .filter(|p| !p.hidden)
+            .filter(|p| {
+                traffic.iter().any(|t| {
+                    t.id == p.id && (t.proxy_extension.is_some() || t.direct > 0)
+                })
+            })
+            .map(|p| p.name.clone())
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| format!("Внутренняя ошибка: {e}"))?;
+    Ok(crate::privacy::check(leaking).await)
+}
+
+fn browser_domain_of(id: &str) -> Result<&'static str, String> {
+    let path = settings::load_with_presets()
+        .app_profiles
+        .into_iter()
+        .find(|p| p.id == id)
+        .and_then(|p| p.exe_path)
+        .ok_or_else(|| "Профиль не найден".to_string())?;
+    crate::browser_policy::policy_domain(&path)
+        .ok_or_else(|| "Этот браузер не поддерживает закрепление политикой".to_string())
+}
+
+/// Состояние «всегда через мост» у браузера; None — браузер без политик.
+#[tauri::command]
+pub async fn browser_policy_status(id: String) -> Result<Option<crate::browser_policy::BrowserPolicyStatus>, String> {
+    let Ok(domain) = browser_domain_of(&id) else { return Ok(None) };
+    tokio::task::spawn_blocking(move || crate::browser_policy::status(domain).map(Some))
+        .await
+        .map_err(|e| format!("Внутренняя ошибка: {e}"))?
+}
+
+/// Включить/снять «всегда через мост» (пароль Mac). Вход — как у «Открыть».
+#[tauri::command]
+pub async fn browser_policy_set(id: String, enable: bool) -> Result<crate::browser_policy::BrowserPolicyStatus, String> {
+    let domain = browser_domain_of(&id)?;
+    let server = if enable {
+        let profile = settings::load_with_presets()
+            .app_profiles
+            .into_iter()
+            .find(|p| p.id == id)
+            .ok_or_else(|| "Профиль не найден".to_string())?;
+        Some(apps::launch_proxy_url(&profile).trim_start_matches("http://").to_string())
+    } else {
+        None
+    };
+    tokio::task::spawn_blocking(move || crate::browser_policy::set(domain, server.as_deref()))
+        .await
+        .map_err(|e| format!("Внутренняя ошибка: {e}"))?
+}

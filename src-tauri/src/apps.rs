@@ -381,7 +381,7 @@ pub fn full_proxy_of(p: &AppProfile) -> bool {
 /// - выбран конкретный прокси → закреплённый вход 8892+N (всё через него);
 /// - «весь трафик» → строгий вход 8890 (без DIRECT);
 /// - иначе общий умный вход 8889.
-fn launch_proxy_url(p: &AppProfile) -> String {
+pub fn launch_proxy_url(p: &AppProfile) -> String {
     let pool = crate::settings::effective_proxies(&crate::settings::load()).len();
     match p.proxy {
         // Закреплённые входы мост поднимает пока только на macOS.

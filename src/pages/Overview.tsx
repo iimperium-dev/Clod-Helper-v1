@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertCircle,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Loader2,
@@ -23,9 +25,10 @@ import {
   shimStart,
   shimStop,
   shimTest,
+  privacyCheck,
 } from "../lib/api";
 import { formatUptime, useStatus } from "../lib/status";
-import type { ShimTestResult } from "../lib/types";
+import type { PrivacyReport, ShimTestResult } from "../lib/types";
 import { fadeInUp, staggerContainer } from "../lib/motion";
 import { cn } from "../lib/cn";
 
@@ -111,6 +114,7 @@ export function Overview({ onOpenProxies }: Props) {
 
   const [busy, setBusy] = useState<"start" | "stop" | "restart" | "test" | null>(null);
   const [testResult, setTestResult] = useState<ShimTestResult | null>(null);
+  const [report, setReport] = useState<PrivacyReport | null>(null);
   const [envBusy, setEnvBusy] = useState(false);
   const [routeBusy, setRouteBusy] = useState(false);
   const [taskBusy, setTaskBusy] = useState(false);
@@ -154,12 +158,16 @@ export function Overview({ onOpenProxies }: Props) {
     }
   };
 
+  /** «Проверить»: связь через мост + проверка приватности (IP, DNS, утечки). */
   const handleTest = async () => {
     setBusy("test");
     setTestResult(null);
+    setReport(null);
     setActionError(null);
     try {
-      setTestResult(await shimTest());
+      const [t, r] = await Promise.all([shimTest(), privacyCheck().catch(() => null)]);
+      setTestResult(t);
+      setReport(r);
     } catch (e) {
       setActionError(String(e));
     } finally {
@@ -226,7 +234,8 @@ export function Overview({ onOpenProxies }: Props) {
       ? chipLabel(health.upstreams[0].url).split(":")[0]
       : null;
   const primaryState = quality[0]?.state ?? (health?.upstreams[0]?.healthy === false ? "down" : "ok");
-  const exitIp = testResult?.ok && testResult.external_ip ? testResult.external_ip : primaryHost;
+  const exitIp =
+    report?.exit?.ip ?? (testResult?.ok && testResult.external_ip ? testResult.external_ip : primaryHost);
   const exitMs = testResult?.ok ? testResult.latency_ms : (poolPing[0]?.ms ?? undefined);
   const spare = Math.max(0, (health?.upstreams.length ?? poolPing.length) - 1);
 
@@ -343,7 +352,21 @@ export function Overview({ onOpenProxies }: Props) {
               Проверить
             </Button>
           </div>
-          {(testResult?.error || shaky.length > 0) && (
+          {/* Проверка приватности — вердикт по пунктам */}
+          <AnimatePresence>
+            {report && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden border-t border-vb-border/70"
+              >
+                <PrivacyRows report={report} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {!report && (testResult?.error || shaky.length > 0) && (
             <p
               className={cn(
                 "border-t border-vb-border/70 px-4 py-2.5 text-[12px] leading-snug",
@@ -515,5 +538,60 @@ export function Overview({ onOpenProxies }: Props) {
         </p>
       )}
     </motion.div>
+  );
+}
+
+/** Вердикт проверки приватности: одна строка на пункт, ✓ или ⚠. */
+function PrivacyRows({ report }: { report: PrivacyReport }) {
+  const rows: { ok: boolean; title: string; sub?: string }[] = [];
+  if (report.error && !report.exit) {
+    rows.push({ ok: false, title: "Проверка не удалась", sub: report.error });
+  } else {
+    rows.push({
+      ok: report.ip_hidden,
+      title: report.ip_hidden ? "Ваш IP скрыт" : "Сервисы видят ваш настоящий IP",
+      sub: report.exit
+        ? `Видят ${report.exit.ip}${report.exit.country ? ` · ${report.exit.country}` : ""}${
+            report.home ? ` — настоящий ${report.home.ip}` : ""
+          }`
+        : undefined,
+    });
+    const dnsOrg = [...new Set(report.dns.map((d) => d.org).filter(Boolean))].slice(0, 2).join(", ");
+    rows.push({
+      ok: !report.dns_leak,
+      title: report.dns_leak ? "DNS выдаёт вашего провайдера" : "DNS не выдаёт провайдера",
+      sub: dnsOrg || undefined,
+    });
+  }
+  rows.push({
+    ok: report.leaking_apps.length === 0,
+    title:
+      report.leaking_apps.length === 0
+        ? "Все приложения через мост"
+        : `Мимо моста: ${report.leaking_apps.join(", ")}`,
+    sub: report.leaking_apps.length > 0 ? "Подробности — в «Приложениях»" : undefined,
+  });
+  const allOk = rows.every((r) => r.ok);
+  return (
+    <div className="px-4 py-3">
+      <div className={cn("mb-2 text-[13px] font-medium", allOk ? "text-vb-emerald" : "text-vb-warn")}>
+        {allOk ? "Всё чисто" : "Есть что поправить"}
+      </div>
+      <ul className="space-y-1.5">
+        {rows.map((r) => (
+          <li key={r.title} className="flex items-start gap-2">
+            {r.ok ? (
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-vb-emerald" />
+            ) : (
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-vb-warn" />
+            )}
+            <span className="min-w-0">
+              <span className="block text-[12px] text-vb-fg">{r.title}</span>
+              {r.sub && <span className="block truncate text-[11px] text-vb-silver-faint">{r.sub}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
