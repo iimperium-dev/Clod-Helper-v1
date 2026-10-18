@@ -133,3 +133,36 @@ pub async fn bridge_versions(app: AppHandle) -> Result<BridgeVersions, String> {
     .await
     .map_err(|e| format!("Внутренняя ошибка: {e}"))
 }
+
+
+// ─── Обновления ─────────────────────────────────────────────────
+
+/// Есть ли новая версия Clod Helper (последний релиз GitHub).
+#[tauri::command]
+pub async fn update_check() -> Result<Option<crate::updater::UpdateInfo>, String> {
+    crate::updater::check().await
+}
+
+/// Скачать, проверить SHA-256, поставить и перезапуститься.
+#[tauri::command]
+pub async fn update_install(app: AppHandle, info: crate::updater::UpdateInfo) -> Result<(), String> {
+    crate::updater::install(&info).await?;
+    // Новую версию поставит и запустит фоновый скрипт, когда мы выйдем.
+    app.exit(0);
+    Ok(())
+}
+
+/// При запуске: встроенный мост новее установленного → обновить сразу.
+/// Без этого после обновления приложения мост оставался старым до ручного
+/// «Обновить мост» (а новые возможности — SOCKS, закреплённые входы —
+/// недоступны).
+pub(crate) async fn auto_update_bridge(app: AppHandle) {
+    let Ok(v) = bridge_versions(app.clone()).await else { return };
+    if !v.outdated || !crate::tasks::is_registered() {
+        return;
+    }
+    match bridge_update(app).await {
+        Ok(_) => tracing::info!("мост обновлён автоматически: {:?} → {:?}", v.installed, v.bundled),
+        Err(e) => tracing::warn!("автообновление моста не удалось: {e}"),
+    }
+}

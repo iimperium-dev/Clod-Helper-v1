@@ -13,6 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+sha2 = "0.10"
 # image-png — смена иконки трея на лету (живой статус моста)
 # macos-private-api — прозрачный трей-попап на macOS (на Windows — no-op).
 tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }

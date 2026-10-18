@@ -287,3 +287,11 @@ export interface BrowserPolicyStatus {
   server: string;
   notice: string | null;
 }
+
+/** Новая версия Clod Helper на GitHub. */
+export interface UpdateInfo {
+  version: string;
+  notes: string;
+  dmg_url: string;
+  sums_url: string;
+}

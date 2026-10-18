@@ -9,6 +9,7 @@ import type {
   AppTraffic,
   FoundApp,
   PrivacyReport,
+  UpdateInfo,
   BrowserPolicyStatus,
   AutostartState,
   BridgeTaskStatus,
@@ -343,4 +344,14 @@ export function browserPolicyStatus(id: string): Promise<BrowserPolicyStatus | n
 
 export function browserPolicySet(id: string, enable: boolean): Promise<BrowserPolicyStatus> {
   return invoke<BrowserPolicyStatus>("browser_policy_set", { id, enable });
+}
+
+/** Новая версия Clod Helper (null — уже последняя). */
+export function updateCheck(): Promise<UpdateInfo | null> {
+  return invoke<UpdateInfo | null>("update_check");
+}
+
+/** Скачать, проверить SHA-256, поставить и перезапуститься. */
+export function updateInstall(info: UpdateInfo): Promise<void> {
+  return invoke<void>("update_install", { info });
 }

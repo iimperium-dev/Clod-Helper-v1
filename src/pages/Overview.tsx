@@ -15,6 +15,7 @@ import { Toggle } from "../components/Toggle";
 import { StatusOrb } from "../components/StatusOrb";
 import { NumberTicker } from "../components/NumberTicker";
 import { Sparkline } from "../components/Sparkline";
+import { UpdateBanner } from "../components/UpdateBanner";
 import {
   bridgeSetRouteMode,
   bridgeTaskRegister,
@@ -531,6 +532,8 @@ export function Overview({ onOpenProxies }: Props) {
           {updateError && <p className="text-[12px] text-vb-loss">{updateError}</p>}
         </motion.section>
       )}
+
+      <UpdateBanner compact />
 
       {health && (
         <p className="mt-4 text-center font-mono text-[10px] text-vb-silver-faint/70">

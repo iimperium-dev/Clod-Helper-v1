@@ -22,6 +22,7 @@ mod traffic;
 mod browser_ext;
 mod browser_policy;
 mod privacy;
+mod updater;
 mod vscode_config;
 
 use tauri::{
@@ -86,6 +87,8 @@ pub fn run() {
             commands::apps_traffic,
             commands::apps_open_extension,
             commands::privacy_check,
+            commands::update_check,
+            commands::update_install,
             commands::browser_policy_status,
             commands::browser_policy_set,
             commands::apps_search,
@@ -167,6 +170,15 @@ pub fn run() {
             // Миграция старых установок: .vbs в Startup → задача Планировщика
             // с автоперезапуском. Фоново — PS-вызовы медленные, UI не ждёт.
             std::thread::spawn(tasks::migrate_from_startup_vbs);
+
+            // Мост обновляется вместе с приложением: встроенный новее
+            // установленного — тихо заменить (перезапуск моста ~1 с).
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    commands::auto_update_bridge(handle).await;
+                });
+            }
 
             // macOS: агент переменных старого формата (`/bin/sh -c`, виден в
             // «Объектах входа» как безымянный «sh») → `clod-helper --apply-env`.
