@@ -171,8 +171,30 @@ fn summarize(
         .collect()
 }
 
+/// Снимок не чаще раза в 3 с: страница «Приложения» и окно настроек могут
+/// спросить почти одновременно, а lsof по всем процессам — не бесплатный.
 #[cfg(not(target_os = "windows"))]
 pub fn snapshot(profiles: &[AppProfile]) -> Vec<AppTraffic> {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    static CACHE: Mutex<Option<(Instant, Vec<String>, Vec<AppTraffic>)>> = Mutex::new(None);
+    let ids: Vec<String> = profiles.iter().map(|p| p.id.clone()).collect();
+    if let Ok(c) = CACHE.lock() {
+        if let Some((t, k, v)) = c.as_ref() {
+            if t.elapsed() < Duration::from_secs(3) && *k == ids {
+                return v.clone();
+            }
+        }
+    }
+    let fresh = snapshot_uncached(profiles);
+    if let Ok(mut c) = CACHE.lock() {
+        *c = Some((Instant::now(), ids, fresh.clone()));
+    }
+    fresh
+}
+
+#[cfg(not(target_os = "windows"))]
+fn snapshot_uncached(profiles: &[AppProfile]) -> Vec<AppTraffic> {
     use std::process::Command;
     // -c: только имя процесса (без пути), как его показывает lsof.
     let running: Vec<String> = Command::new("/bin/ps")

@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use tauri::tray::TrayIcon;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::shim::{self, LISTEN_PORT};
@@ -170,9 +170,12 @@ fn run(app: AppHandle, h: TrayHandles) {
             && skip_healthz_until.map(|t| Instant::now() > t).unwrap_or(true)
         {
             match fetch_healthz() {
-                Some(x) => {
+                Some((x, raw)) => {
                     healthz_fail_streak = 0;
                     skip_healthz_until = None;
+                    // Один опрос моста на всё приложение: окна получают
+                    // свежий /healthz событием и сами мост не опрашивают.
+                    let _ = app.emit("bridge-health", raw);
                     Some(x)
                 }
                 None => {
@@ -332,7 +335,7 @@ fn port_listening() -> bool {
 }
 
 /// GET /healthz мини-клиентом на std::net (монитор — обычный поток, не tokio).
-fn fetch_healthz() -> Option<Health> {
+fn fetch_healthz() -> Option<(Health, serde_json::Value)> {
     let addr: SocketAddr = format!("127.0.0.1:{LISTEN_PORT}").parse().ok()?;
     let mut s = TcpStream::connect_timeout(&addr, Duration::from_millis(800)).ok()?;
     s.set_read_timeout(Some(Duration::from_secs(2))).ok()?;
@@ -343,7 +346,9 @@ fn fetch_healthz() -> Option<Health> {
     let _ = s.read_to_end(&mut buf);
     let text = String::from_utf8_lossy(&buf);
     let body = text.split("\r\n\r\n").nth(1)?;
-    serde_json::from_str::<Health>(body.trim()).ok()
+    let raw: serde_json::Value = serde_json::from_str(body.trim()).ok()?;
+    let h = serde_json::from_value::<Health>(raw.clone()).ok()?;
+    Some((h, raw))
 }
 
 /// host:port из masked-URL upstream'а ("http://user:****@host:port" | "http://host:port").

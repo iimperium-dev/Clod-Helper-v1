@@ -1114,15 +1114,28 @@ pub fn search_installed(query: &str) -> Vec<FoundApp> {
     if q.chars().count() < 2 {
         return Vec::new();
     }
-    let out = Command::new("/usr/bin/mdfind")
-        .args([
-            "-attr",
-            "kMDItemDisplayName",
-            "kMDItemContentType == 'com.apple.application-bundle'",
-        ])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
+    // Список всех программ кэшируется на 30 с: запрос идёт на каждую букву.
+    static CACHE: std::sync::Mutex<Option<(std::time::Instant, String)>> = std::sync::Mutex::new(None);
+    let cached = CACHE.lock().ok().and_then(|c| {
+        c.as_ref()
+            .filter(|(t, _)| t.elapsed() < std::time::Duration::from_secs(30))
+            .map(|(_, s)| s.clone())
+    });
+    let out = cached.unwrap_or_else(|| {
+        let s = Command::new("/usr/bin/mdfind")
+            .args([
+                "-attr",
+                "kMDItemDisplayName",
+                "kMDItemContentType == 'com.apple.application-bundle'",
+            ])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        if let Ok(mut c) = CACHE.lock() {
+            *c = Some((std::time::Instant::now(), s.clone()));
+        }
+        s
+    });
     let home = dirs::home_dir().map(|h| h.to_string_lossy().to_string()).unwrap_or_default();
     rank_found(&out, q, &home)
 }
@@ -1181,6 +1194,34 @@ pub fn icons(paths: &[String]) -> std::collections::HashMap<String, String> {
     static CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
 
+    // Дисковый кэш (~/Library/Caches/…/icons): иконка не меняется, пока не
+    // обновится бандл — ключ включает mtime Info.plist.
+    let disk_dir = dirs::cache_dir().map(|d| d.join("ru.iimperium.clodhelper/icons"));
+    let disk_key = |p: &str| -> Option<PathBuf> {
+        let m = std::fs::metadata(std::path::Path::new(p).join("Contents/Info.plist"))
+            .and_then(|m| m.modified())
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (p, m).hash(&mut h);
+        Some(disk_dir.as_ref()?.join(format!("{:016x}.png", h.finish())))
+    };
+    if let Ok(mut c) = cache.lock() {
+        for p in paths {
+            if c.contains_key(p) {
+                continue;
+            }
+            if let Some(bytes) = disk_key(p).and_then(|f| std::fs::read(f).ok()) {
+                use base64::Engine;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+                c.insert(p.clone(), format!("data:image/png;base64,{b64}"));
+            }
+        }
+    }
+
     let missing: Vec<&String> = {
         let c = cache.lock().map(|c| c.clone()).unwrap_or_default();
         paths
@@ -1207,6 +1248,15 @@ pub fn icons(paths: &[String]) -> std::collections::HashMap<String, String> {
                 {
                     if let Ok(mut c) = cache.lock() {
                         for (k, v) in map {
+                            if let Some(f) = disk_key(&k) {
+                                use base64::Engine;
+                                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(&v) {
+                                    if let Some(dir) = f.parent() {
+                                        let _ = std::fs::create_dir_all(dir);
+                                    }
+                                    let _ = std::fs::write(&f, bytes);
+                                }
+                            }
                             c.insert(k, format!("data:image/png;base64,{v}"));
                         }
                     }
