@@ -202,7 +202,7 @@ pub async fn apps_launch(id: String) -> Result<(), String> {
         .map_err(|e| format!("Внутренняя ошибка: {e}"))?
 }
 
-/// Закрыть приложение, открытое мимо моста, и запустить через мост (macOS).
+/// Закрыть приложение, открытое мимо моста, и запустить через мост.
 #[tauri::command]
 pub async fn apps_relaunch(id: String) -> Result<(), String> {
     let profile = settings::load_with_presets()
@@ -210,14 +210,9 @@ pub async fn apps_relaunch(id: String) -> Result<(), String> {
         .into_iter()
         .find(|p| p.id == id)
         .ok_or_else(|| "Профиль не найден".to_string())?;
-    #[cfg(not(target_os = "windows"))]
-    return tokio::task::spawn_blocking(move || apps::relaunch(&profile))
+    tokio::task::spawn_blocking(move || apps::relaunch(&profile))
         .await
-        .map_err(|e| format!("Внутренняя ошибка: {e}"))?;
-    #[cfg(target_os = "windows")]
-    return tokio::task::spawn_blocking(move || apps::launch(&profile))
-        .await
-        .map_err(|e| format!("Внутренняя ошибка: {e}"))?;
+        .map_err(|e| format!("Внутренняя ошибка: {e}"))?
 }
 
 /// Создать ярлык «<name> (proxy)» на рабочем столе или в панели задач.

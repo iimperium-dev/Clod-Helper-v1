@@ -103,3 +103,14 @@ test("прокси, настройки и сайдбар", async ({ page }) => {
   await page.screenshot({ path: "test-results/sidebar-open.png" });
   expect(errors).toEqual([]);
 });
+
+test("windows: статусы по соединениям, Telegram и вид плитками", async ({ page }) => {
+  const errors = await open(page, "still&platform=win");
+  await go(page, "Приложения");
+  await expect(page.getByText("Telegram").first()).toBeVisible();
+  await expect(page.getByText("Через мост · 4").first()).toBeVisible();
+  await expect(page.getByText("Прокси перехватывает FoxyProxy").first()).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Вид" })).toBeVisible();
+  await page.screenshot({ path: "test-results/apps-windows.png" });
+  expect(errors).toEqual([]);
+});

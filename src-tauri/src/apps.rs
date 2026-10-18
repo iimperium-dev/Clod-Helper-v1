@@ -205,7 +205,32 @@ pub fn builtin_presets() -> Vec<AppProfile> {
             proxy: None,
             full_proxy: None,
         },
+        // Telegram Desktop: ходит через SOCKS-вход моста (настройка — в его
+        // окне прокси по ссылке tg://socks), «Открыть» — без параметров.
+        AppProfile {
+            id: TELEGRAM_ID.into(),
+            name: "Telegram".into(),
+            kind: LaunchKind::ExeFlag,
+            exe_path: find_telegram_exe().map(|p| p.to_string_lossy().to_string()),
+            app_id: None,
+            process_names: vec!["Telegram.exe".into()],
+            enabled: false,
+            builtin: true,
+            hidden: false,
+            proxy: None,
+            full_proxy: None,
+        },
     ]
+}
+
+/// Telegram Desktop на Windows: обычная установка — в %APPDATA%.
+#[cfg(target_os = "windows")]
+pub fn find_telegram_exe() -> Option<PathBuf> {
+    [dirs::config_dir(), dirs::data_local_dir().map(|d| d.join("Programs"))]
+        .into_iter()
+        .flatten()
+        .map(|d| d.join("Telegram Desktop").join("Telegram.exe"))
+        .find(|p| p.exists())
 }
 
 // ─── Детект приложений ───────────────────────────────────────────
@@ -384,8 +409,8 @@ pub fn full_proxy_of(p: &AppProfile) -> bool {
 pub fn launch_proxy_url(p: &AppProfile) -> String {
     let pool = crate::settings::effective_proxies(&crate::settings::load()).len();
     match p.proxy {
-        // Закреплённые входы мост поднимает пока только на macOS.
-        Some(i) if i < pool && cfg!(not(target_os = "windows")) => {
+        // Закреплённые входы есть у моста ≥1.7 (macOS и Windows).
+        Some(i) if i < pool && pinned_listeners_available() => {
             format!("http://127.0.0.1:{}", crate::tasks::PIN_PORT_BASE + i as u16)
         }
         _ if full_proxy_of(p) => crate::claude_policy::PROXY_URL.to_string(),
@@ -398,6 +423,27 @@ pub fn launch_proxy_url(p: &AppProfile) -> String {
 /// detection»). Флаг Chromium запрещает WebRTC ходить мимо прокси; на
 /// не-Chromium приложения не влияет.
 const WEBRTC_GUARD: &str = "--webrtc-ip-handling-policy=disable_non_proxied_udp";
+
+/// Мост поднимает закреплённые входы (≥1.7)? Проба версии exe кэшируется.
+fn pinned_listeners_available() -> bool {
+    use std::sync::Mutex;
+    static CACHE: Mutex<Option<(std::time::SystemTime, bool)>> = Mutex::new(None);
+    let Some(exe) = crate::shim::bridge_exe_path().filter(|p| p.exists()) else {
+        return false;
+    };
+    let mtime = std::fs::metadata(&exe).and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH);
+    if let Ok(mut c) = CACHE.lock() {
+        if let Some((t, v)) = *c {
+            if t == mtime {
+                return v;
+            }
+        }
+        let v = crate::tasks::bridge_supports_pin_listen(&exe);
+        *c = Some((mtime, v));
+        return v;
+    }
+    false
+}
 
 /// Строка прокси для локального моста, которую впрыскиваем приложению.
 fn local_proxy_url() -> String {
@@ -451,6 +497,47 @@ pub fn relaunch(p: &AppProfile) -> Result<(), String> {
     launch(p)
 }
 
+/// Windows: закрыть штатно (taskkill без /F — как крестик окна, с вопросами
+/// о несохранённом), дождаться выхода и запустить через мост.
+#[cfg(target_os = "windows")]
+pub fn relaunch(p: &AppProfile) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let images: Vec<String> = p
+        .process_names
+        .iter()
+        .map(|n| if n.to_lowercase().ends_with(".exe") { n.clone() } else { format!("{n}.exe") })
+        .collect();
+    if images.is_empty() {
+        return launch(p);
+    }
+    let running = || {
+        Command::new("tasklist")
+            .args(["/FO", "CSV", "/NH"])
+            .creation_flags(0x0800_0000)
+            .output()
+            .map(|o| {
+                let out = String::from_utf8_lossy(&o.stdout).to_lowercase();
+                images.iter().any(|i| out.contains(&format!("\"{}\"", i.to_lowercase())))
+            })
+            .unwrap_or(false)
+    };
+    if running() {
+        for i in &images {
+            let _ = Command::new("taskkill").args(["/IM", i]).creation_flags(0x0800_0000).status();
+        }
+        for _ in 0..40 {
+            if !running() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        if running() {
+            return Err(format!("{} не закрылся — закройте его и нажмите «Открыть»", p.name));
+        }
+    }
+    launch(p)
+}
+
 pub fn launch(p: &AppProfile) -> Result<(), String> {
     if p.id == crate::claude_desktop::PROFILE_ID {
         return crate::claude_desktop::launch();
@@ -496,6 +583,13 @@ fn launch_exe(p: &AppProfile) -> Result<(), String> {
         }
     }
 
+    if p.id == TELEGRAM_ID {
+        // Прокси Telegram — в его настройках (SOCKS моста), флагов он не знает.
+        let mut cmd = Command::new(&exe);
+        apply_no_window(&mut cmd);
+        cmd.spawn().map_err(|e| format!("Не удалось запустить Telegram: {e}"))?;
+        return Ok(());
+    }
     let mut cmd = Command::new(&exe);
     cmd.arg(format!("--proxy-server={proxy}"));
     cmd.arg(WEBRTC_GUARD);
