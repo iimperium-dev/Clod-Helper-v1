@@ -3,6 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 // Тесты интерфейса на стенде mock.html (подставной бэкенд Tauri): страницы
 // открываются без ошибок, ключевые сценарии работают, снимки — в test-results.
 export default defineConfig({
+  // В CI первый заход ждёт компиляцию vite — один повтор от случайных таймаутов.
+  retries: process.env.CI ? 1 : 0,
   testDir: "tests/ui",
   outputDir: "test-results",
   timeout: 30_000,

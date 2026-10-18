@@ -21,8 +21,10 @@ test("обзор: IP один раз, проверка приватности с
   await expect(page.getByText("Доступна версия 0.7.0")).toBeVisible();
   await page.getByRole("button", { name: "Проверить" }).click();
   await expect(page.getByText("Всё чисто")).toBeVisible();
-  await expect(page.getByText("Ваш IP скрыт")).toBeVisible();
+  await expect(page.getByText("Через мост ваш IP скрыт")).toBeVisible();
   await expect(page.getByText("DNS не выдаёт провайдера")).toBeVisible();
+  await expect(page.getByText("Приложения из вашего списка — через мост")).toBeVisible();
+  await expect(page.getByText("Остальные программы работают напрямую, как обычно")).toBeVisible();
   await page.screenshot({ path: "test-results/overview.png" });
   expect(errors).toEqual([]);
 });

@@ -333,7 +333,7 @@ export function Overview({ onOpenProxies }: Props) {
               />
               <span className="min-w-0">
                 <span className="block text-[11px] text-vb-silver-faint">
-                  Выход в интернет{spare > 0 && ` · +${spare} запасн.`}
+                  Выход через мост{spare > 0 && ` · +${spare} запасн.`}
                 </span>
                 <span className="flex items-baseline gap-2">
                   <span className="truncate font-mono text-[14px] text-vb-fg">
@@ -470,15 +470,15 @@ export function Overview({ onOpenProxies }: Props) {
       <motion.section variants={fadeInUp} className="surface-card mt-5 divide-y divide-vb-border/70">
         <div className="flex items-center justify-between gap-4 px-4 py-3.5">
           <div className="min-w-0">
-            <div className="text-[14px] font-medium text-vb-fg">Все программы через мост</div>
+            <div className="text-[14px] font-medium text-vb-fg">Терминал и Claude Code через мост</div>
             <div className="text-[12px] text-vb-silver-faint">
-              Терминал, VS Code, Claude Code — без настройки
+              Программы, которые понимают системный прокси (git, npm, VS Code)
             </div>
           </div>
           {env === null ? (
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-vb-silver-dim" />
           ) : (
-            <Toggle checked={envOn} onChange={handleEnvToggle} disabled={envBusy} label="Все программы через мост" />
+            <Toggle checked={envOn} onChange={handleEnvToggle} disabled={envBusy} label="Терминал и Claude Code через мост" />
           )}
         </div>
         {envForeign && (
@@ -552,7 +552,7 @@ function PrivacyRows({ report }: { report: PrivacyReport }) {
   } else {
     rows.push({
       ok: report.ip_hidden,
-      title: report.ip_hidden ? "Ваш IP скрыт" : "Сервисы видят ваш настоящий IP",
+      title: report.ip_hidden ? "Через мост ваш IP скрыт" : "Через мост виден ваш настоящий IP",
       sub: report.exit
         ? `Видят ${report.exit.ip}${report.exit.country ? ` · ${report.exit.country}` : ""}${
             report.home ? ` — настоящий ${report.home.ip}` : ""
@@ -570,9 +570,13 @@ function PrivacyRows({ report }: { report: PrivacyReport }) {
     ok: report.leaking_apps.length === 0,
     title:
       report.leaking_apps.length === 0
-        ? "Все приложения через мост"
+        ? "Приложения из вашего списка — через мост"
         : `Мимо моста: ${report.leaking_apps.join(", ")}`,
-    sub: report.leaking_apps.length > 0 ? "Подробности — в «Приложениях»" : undefined,
+    // Мост — не VPN: остальные программы компьютера ходят напрямую.
+    sub:
+      report.leaking_apps.length > 0
+        ? "Подробности — в «Приложениях»"
+        : "Остальные программы работают напрямую, как обычно",
   });
   const allOk = rows.every((r) => r.ok);
   return (
