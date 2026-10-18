@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "bridge:build": "cargo build --release --manifest-path bridge/Cargo.toml && node -e \"require('fs').copyFileSync('bridge/target/release/clod-bridge.exe','src-tauri/resources/clod-bridge.exe')\"",
-    "bridge:build:mac": "sh scripts/build-bridge-mac.sh"
+    "bridge:build:mac": "sh scripts/build-bridge-mac.sh",
+    "mock": "vite --port 1420 --strictPort --open /mock.html",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "@fontsource/inter": "^5.1.0",
@@ -26,6 +28,7 @@
     "simple-icons": "^16.27.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/vite": "^4.0.0",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",

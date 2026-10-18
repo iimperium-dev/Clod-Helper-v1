@@ -109,16 +109,20 @@ export function Apps() {
   }, []);
 
   // Иконки своих приложений (встроенные рисуются брендовыми плитками).
+  // Каждый путь запрашиваем один раз: если иконку не удалось достать, ответ
+  // пустой — повторный запрос по изменению icons зациклил бы опрос.
+  const askedIcons = useRef(new Set<string>());
   useEffect(() => {
     if (!isMac || !apps) return;
     const need = apps
-      .filter((a) => a.location && !(a.location in icons))
-      .map((a) => a.location as string);
+      .map((a) => a.location)
+      .filter((l): l is string => !!l && !askedIcons.current.has(l));
     if (need.length === 0) return;
+    need.forEach((l) => askedIcons.current.add(l));
     appsIcons(need)
       .then((got) => setIcons((old) => ({ ...old, ...got })))
       .catch(() => {});
-  }, [apps, icons]);
+  }, [apps]);
 
   const loadTraffic = useCallback(async () => {
     if (!isMac) return;
@@ -262,7 +266,7 @@ export function Apps() {
       return {
         status: { tone: "warn", text: `Прокси перехватывает ${ext.name}` },
         action: {
-          label: `Отключить ${ext.name}`,
+          label: "Отключить",
           run: () =>
             after(appsOpenExtension(app.id, ext.id)).then(
               () => `Выключите ${ext.name} в открывшейся вкладке — перезапуск не нужен`,
