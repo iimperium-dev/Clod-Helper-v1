@@ -525,6 +525,44 @@ fn host_matches(host: &str, domain: &str) -> bool {
             && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
 }
 
+/// Сети Anthropic и Telegram (официальные диапазоны). Клиенты, идущие по
+/// IP без имени (Telegram — к своим DC), иначе попадали бы в «напрямую»:
+/// правила умного режима сопоставляются по доменам.
+const SERVICE_NETS: &[(&str, u8)] = &[
+    ("160.79.104.0", 21),
+    ("2607:6bc0::", 48),
+    ("149.154.160.0", 20),
+    ("91.108.0.0", 16),
+    ("91.105.192.0", 23),
+    ("95.161.64.0", 20),
+    ("185.76.151.0", 24),
+    ("2001:b28:f23d::", 48),
+    ("2001:b28:f23f::", 48),
+    ("2001:67c:4e8::", 48),
+    ("2a0a:f280::", 32),
+];
+
+fn is_service_ip(host: &str) -> bool {
+    let Ok(ip) = host.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>() else {
+        return false;
+    };
+    let bits = |ip: std::net::IpAddr| -> u128 {
+        match ip {
+            std::net::IpAddr::V4(v) => u32::from(v) as u128,
+            std::net::IpAddr::V6(v) => u128::from(v),
+        }
+    };
+    SERVICE_NETS.iter().any(|(net, len)| {
+        let Ok(net) = net.parse::<std::net::IpAddr>() else { return false };
+        if net.is_ipv4() != ip.is_ipv4() {
+            return false;
+        }
+        let width = if ip.is_ipv4() { 32 } else { 128 };
+        let shift = width - *len as u32;
+        (bits(ip) >> shift) == (bits(net) >> shift)
+    })
+}
+
 fn decide(state: &State, host: &str) -> Route {
     if state.routing_policy != RoutingPolicy::Rules {
         return Route::Upstream;
@@ -535,7 +573,7 @@ fn decide(state: &State, host: &str) -> Route {
     match state.mode {
         Mode::All => Route::Upstream,
         Mode::Smart => {
-            if state.proxy_domains.iter().any(|d| host_matches(host, d)) {
+            if state.proxy_domains.iter().any(|d| host_matches(host, d)) || is_service_ip(host) {
                 Route::Upstream
             } else {
                 Route::Direct
@@ -1927,6 +1965,17 @@ async fn serve_listener(listener: TcpListener, state: Arc<State>, sem: Arc<Semap
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn service_ips_go_upstream() {
+        assert!(is_service_ip("160.79.104.10"));
+        assert!(is_service_ip("149.154.167.51"));
+        assert!(is_service_ip("[2001:b28:f23d:f001::a]"));
+        assert!(is_service_ip("2607:6bc0::10"));
+        assert!(!is_service_ip("160.79.112.1"), "за пределами /21");
+        assert!(!is_service_ip("1.1.1.1"));
+        assert!(!is_service_ip("api.anthropic.com"));
+    }
     use super::*;
 
     fn test_state(policy: RoutingPolicy, upstreams: Vec<Upstream>) -> State {
